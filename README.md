@@ -18,7 +18,7 @@ npm test
 npm run build
 ```
 
-**Application disponible sur : http://localhost:5174/**
+**Application disponible sur : http://localhost:5173/**
 
 ## ✨ Fonctionnalités Principales
 

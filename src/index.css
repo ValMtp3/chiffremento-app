@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles personnalisés pour éviter les débordements */
+@layer components {
+    .password-generator {
+        @apply w-full overflow-hidden;
+    }
+
+    .password-input {
+        @apply w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white font-mono text-sm;
+        word-break: break-all;
+        overflow-wrap: break-word;
+    }
+
+    .strength-bar-container {
+        @apply w-full bg-gray-700 rounded-full h-2;
+        min-width: 0;
+    }
+
+    .strength-bar {
+        @apply h-2 rounded-full transition-all duration-300;
+        min-width: 2px;
+    }
+
+    .responsive-grid {
+        @apply grid gap-2;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .truncate-text {
+        @apply truncate;
+        max-width: 100%;
+    }
+
+    .break-words {
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+}
+
+/* Améliorations pour les sliders */
+@layer utilities {
+    input[type="range"] {
+        @apply w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        @apply appearance-none w-4 h-4 bg-yellow-500 rounded-full cursor-pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+        @apply w-4 h-4 bg-yellow-500 rounded-full cursor-pointer border-0;
+    }
+}
+
+/* Prévention des débordements globaux */
+* {
+    box-sizing: border-box;
+}
+
+.container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Amélioration des boutons sur mobile */
+@media (max-width: 640px) {
+    .password-generator .responsive-grid {
+        @apply grid-cols-1 gap-3;
+    }
+
+    .password-generator button {
+        @apply text-sm py-3;
+        min-height: 44px;
+    }
+
+    .password-generator input {
+        @apply text-sm py-3;
+        min-height: 44px;
+    }
+}

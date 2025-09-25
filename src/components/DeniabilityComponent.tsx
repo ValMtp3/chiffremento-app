@@ -1,5 +1,13 @@
 import React, { useState, useCallback } from "react";
-import { Shield, Eye, EyeOff, Download, Upload, Lock } from "lucide-react";
+import {
+  Shield,
+  Eye,
+  EyeOff,
+  Download,
+  Upload,
+  Lock,
+  AlertTriangle,
+} from "lucide-react";
 import { CryptoUtils } from "../utils/crypto";
 
 interface DeniabilityComponentProps {}
@@ -18,13 +26,28 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
   const [mode, setMode] = useState<"create" | "extract">("create");
   const [extractMode, setExtractMode] = useState<"public" | "hidden">("public");
   const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
+  const [containerInfo, setContainerInfo] = useState<{
+    publicSize: number;
+    hiddenSize: number;
+    totalSize: number;
+  } | null>(null);
 
   const handlePublicFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
+        if (file.size === 0) {
+          setError("Le fichier public ne peut pas être vide");
+          return;
+        }
+        if (file.size > 100 * 1024 * 1024) {
+          setError("Fichier public trop volumineux (limite: 100MB)");
+          return;
+        }
         setPublicFile(file);
         setError("");
+        setSuccess("");
       }
     },
     [],
@@ -34,19 +57,44 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
+        if (file.size === 0) {
+          setError("Le fichier caché ne peut pas être vide");
+          return;
+        }
+        if (file.size > 50 * 1024 * 1024) {
+          setError("Fichier caché trop volumineux (limite: 50MB)");
+          return;
+        }
+        // Vérifier le ratio de taille recommandé
+        if (publicFile && file.size > publicFile.size * 0.3) {
+          setError(
+            "Le fichier caché devrait être plus petit que 30% du fichier public pour plus de sécurité",
+          );
+          return;
+        }
         setHiddenFile(file);
         setError("");
+        setSuccess("");
       }
     },
-    [],
+    [publicFile],
   );
 
   const handleContainerFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
+        if (file.size === 0) {
+          setError("Le fichier conteneur ne peut pas être vide");
+          return;
+        }
+        if (!file.name.endsWith(".deniable")) {
+          setError("Sélectionnez un fichier conteneur (.deniable)");
+          return;
+        }
         setContainerFile(file);
         setError("");
+        setSuccess("");
       }
     },
     [],
@@ -63,14 +111,27 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
       return;
     }
 
+    if (publicPassword.length < 12 || hiddenPassword.length < 12) {
+      setError("Les mots de passe doivent contenir au moins 12 caractères");
+      return;
+    }
+
     try {
       setIsProcessing(true);
       setError("");
+      setSuccess("");
 
       const publicData = await publicFile.arrayBuffer();
       const hiddenData = await hiddenFile.arrayBuffer();
 
-      const container = CryptoUtils.createDeniableContainer(
+      // Validation des tailles
+      if (hiddenData.byteLength > publicData.byteLength * 0.3) {
+        throw new Error(
+          "Le fichier caché est trop volumineux par rapport au fichier public",
+        );
+      }
+
+      const container = await CryptoUtils.createDeniableContainer(
         publicData,
         hiddenData,
         publicPassword,
@@ -78,8 +139,21 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
       );
 
       setDeniableContainer(container);
+      setContainerInfo({
+        publicSize: publicData.byteLength,
+        hiddenSize: hiddenData.byteLength,
+        totalSize: container.byteLength,
+      });
+
+      setSuccess("Conteneur deniable créé avec succès!");
+
+      // Nettoyer les mots de passe après utilisation
+      setPublicPassword("");
+      setHiddenPassword("");
     } catch (err) {
-      setError(`Erreur lors de la création: ${err.message}`);
+      const errorMessage =
+        err instanceof Error ? err.message : "Erreur inconnue";
+      setError(`Erreur lors de la création: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -91,29 +165,75 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
       return;
     }
 
+    if (extractPassword.length < 12) {
+      setError("Le mot de passe doit contenir au moins 12 caractères");
+      return;
+    }
+
     try {
       setIsProcessing(true);
       setError("");
+      setSuccess("");
 
       const containerData = await containerFile.arrayBuffer();
 
       if (extractMode === "public") {
-        // Extraction des données publiques (début du conteneur)
-        const publicSize = Math.floor(containerData.byteLength * 0.6); // Approximation
-        const publicData = containerData.slice(0, publicSize);
-        setExtractedData(publicData);
+        // Extraction des données publiques (toujours au début du conteneur)
+        const headerSize = 256;
+        const container = new Uint8Array(containerData);
+        const publicSalt = container.slice(0, 32);
+        const publicIV = container.slice(32, 44);
+
+        // Les données publiques sont stockées après le header
+        const publicDataStart = headerSize;
+        const publicData = container.slice(publicDataStart);
+
+        // Tentative de déchiffrement des données publiques avec le mot de passe fourni
+        try {
+          const { key } = await CryptoUtils.deriveKey(
+            extractPassword,
+            publicSalt,
+            "aes-256-gcm",
+          );
+          const decryptedPublic = await CryptoUtils.decryptAES(
+            publicData.buffer,
+            key,
+            publicIV,
+          );
+          setExtractedData(decryptedPublic);
+          setSuccess("Données publiques extraites avec succès!");
+        } catch (decryptError) {
+          throw new Error("Mot de passe public incorrect");
+        }
       } else {
         // Extraction des données cachées
-        const hiddenSize = Math.floor(containerData.byteLength * 0.2); // Approximation
-        const hiddenData = CryptoUtils.extractHiddenData(
-          containerData,
-          extractPassword,
-          hiddenSize,
-        );
-        setExtractedData(hiddenData);
+        try {
+          const hiddenData = await CryptoUtils.extractHiddenData(
+            containerData,
+            extractPassword,
+          );
+          setExtractedData(hiddenData);
+          setSuccess("Données cachées extraites avec succès!");
+        } catch (extractError) {
+          if (
+            extractError instanceof Error &&
+            extractError.message.includes("Mot de passe incorrect")
+          ) {
+            throw new Error(
+              "Mot de passe caché incorrect ou aucune donnée cachée trouvée",
+            );
+          } else {
+            throw extractError;
+          }
+        }
       }
+
+      // Nettoyer le mot de passe après utilisation
+      setExtractPassword("");
     } catch (err) {
-      setError(`Erreur lors de l'extraction: ${err.message}`);
+      const errorMessage =
+        err instanceof Error ? err.message : "Erreur inconnue";
+      setError(`Erreur lors de l'extraction: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -122,11 +242,13 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
   const downloadContainer = () => {
     if (!deniableContainer) return;
 
-    const blob = new Blob([deniableContainer]);
+    const blob = new Blob([deniableContainer], {
+      type: "application/octet-stream",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "deniable_container.dat";
+    a.download = `deniable_container_${Date.now()}.deniable`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -134,11 +256,13 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
   const downloadExtracted = () => {
     if (!extractedData) return;
 
-    const blob = new Blob([extractedData]);
+    const blob = new Blob([extractedData], {
+      type: "application/octet-stream",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `extracted_${extractMode}_data.bin`;
+    a.download = `extracted_${extractMode}_data_${Date.now()}.bin`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -224,28 +348,47 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Mot de passe public
+                Mot de passe public (minimum 12 caractères)
               </label>
               <input
                 type="password"
                 value={publicPassword}
                 onChange={(e) => setPublicPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                placeholder="Mot de passe pour les données publiques..."
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                placeholder="Mot de passe fort pour les données publiques..."
+                minLength={12}
               />
+              {publicPassword && publicPassword.length < 12 && (
+                <p className="text-red-400 text-xs mt-1">
+                  Minimum 12 caractères requis
+                </p>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Mot de passe caché
+                Mot de passe caché (minimum 12 caractères)
               </label>
               <input
                 type="password"
                 value={hiddenPassword}
                 onChange={(e) => setHiddenPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                placeholder="Mot de passe pour les données cachées..."
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                placeholder="Mot de passe fort pour les données cachées..."
+                minLength={12}
               />
+              {hiddenPassword && hiddenPassword.length < 12 && (
+                <p className="text-red-400 text-xs mt-1">
+                  Minimum 12 caractères requis
+                </p>
+              )}
+              {publicPassword &&
+                hiddenPassword &&
+                publicPassword === hiddenPassword && (
+                  <p className="text-red-400 text-xs mt-1">
+                    Doit être différent du mot de passe public
+                  </p>
+                )}
             </div>
           </div>
 
@@ -267,13 +410,47 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
           </button>
 
           {deniableContainer && (
-            <button
-              onClick={downloadContainer}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Télécharger le conteneur
-            </button>
+            <div className="space-y-3">
+              {containerInfo && (
+                <div className="bg-gray-700 rounded-lg p-3 text-sm">
+                  <h5 className="text-green-400 font-medium mb-2">
+                    Conteneur créé
+                  </h5>
+                  <div className="space-y-1 text-gray-300">
+                    <p>
+                      Données publiques:{" "}
+                      {(containerInfo.publicSize / 1024).toFixed(1)} KB
+                    </p>
+                    <p>
+                      Données cachées:{" "}
+                      {(containerInfo.hiddenSize / 1024).toFixed(1)} KB
+                    </p>
+                    <p>
+                      Taille totale:{" "}
+                      {(containerInfo.totalSize / 1024).toFixed(1)} KB
+                    </p>
+                    <p>
+                      Efficacité:{" "}
+                      {(
+                        ((containerInfo.totalSize -
+                          containerInfo.publicSize -
+                          containerInfo.hiddenSize) /
+                          containerInfo.totalSize) *
+                        100
+                      ).toFixed(1)}
+                      % de bruit cryptographique
+                    </p>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={downloadContainer}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Télécharger le conteneur (.deniable)
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -283,10 +460,11 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Conteneur deniable
+              Conteneur deniable (.deniable)
             </label>
             <input
               type="file"
+              accept=".deniable"
               onChange={handleContainerFileSelect}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
             />
@@ -336,15 +514,22 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Mot de passe {extractMode === "public" ? "public" : "caché"}
+              Mot de passe {extractMode === "public" ? "public" : "caché"}{" "}
+              (minimum 12 caractères)
             </label>
             <input
               type="password"
               value={extractPassword}
               onChange={(e) => setExtractPassword(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
               placeholder={`Mot de passe pour les données ${extractMode === "public" ? "publiques" : "cachées"}...`}
+              minLength={12}
             />
+            {extractPassword && extractPassword.length < 12 && (
+              <p className="text-red-400 text-xs mt-1">
+                Minimum 12 caractères requis
+              </p>
+            )}
           </div>
 
           <button
@@ -378,23 +563,62 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
         </div>
       )}
 
-      {/* Error Display */}
+      {/* Success/Error Display */}
+      {success && (
+        <div className="mt-4 bg-green-900/50 border border-green-600 rounded-lg p-3">
+          <p className="text-green-400 text-sm flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            {success}
+          </p>
+        </div>
+      )}
+
       {error && (
         <div className="mt-4 bg-red-900/50 border border-red-600 rounded-lg p-3">
-          <p className="text-red-400 text-sm">{error}</p>
+          <p className="text-red-400 text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            {error}
+          </p>
         </div>
       )}
 
       {/* Info */}
       <div className="mt-6 bg-gray-700 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-gray-300 mb-2">
-          🛡️ Mode Deniability
+        <h4 className="text-sm font-medium text-gray-300 mb-3">
+          🛡️ Sécurité Avancée - Mode Deniability
         </h4>
         <div className="space-y-2 text-xs text-gray-400">
-          <p>• Crée un conteneur avec deux niveaux de données</p>
-          <p>• Le mot de passe public révèle des données de leurre</p>
-          <p>• Le mot de passe caché révèle les vraies données secrètes</p>
-          <p>• Impossible de prouver l'existence des données cachées</p>
+          <p>
+            • <strong>Chiffrement AES-256-GCM</strong> pour les données
+            publiques
+          </p>
+          <p>
+            • <strong>Chiffrement Twofish-256-CBC</strong> pour les données
+            cachées
+          </p>
+          <p>
+            • <strong>Position cryptographique</strong> des données cachées
+            basée sur SHA-256
+          </p>
+          <p>
+            • <strong>Bruit cryptographique</strong> pour masquer les vraies
+            tailles
+          </p>
+          <p>
+            • <strong>Sels uniques</strong> de 32 bytes pour chaque couche
+          </p>
+          <p>
+            • <strong>PBKDF2</strong> avec 1M iterations pour ralentir les
+            attaques
+          </p>
+          <p>
+            • <strong>Déni plausible</strong>: impossible de prouver l'existence
+            des données cachées
+          </p>
+          <p>
+            • <strong>Recommandation</strong>: fichier caché ≤ 30% du fichier
+            public
+          </p>
         </div>
       </div>
     </div>

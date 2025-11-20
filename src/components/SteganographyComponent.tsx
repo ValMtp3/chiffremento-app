@@ -1,8 +1,11 @@
 import React, { useState, useCallback } from "react";
-import { Upload, Download, Eye, EyeOff, Image } from "lucide-react";
+import { Download, Eye, EyeOff, Image } from "lucide-react";
 import { CryptoUtils } from "../utils/crypto";
 
-interface SteganographyComponentProps {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface SteganographyComponentProps {
+  // Props intentionnellement vide pour l'instant
+}
 
 export const SteganographyComponent: React.FC<
   SteganographyComponentProps
@@ -18,7 +21,6 @@ export const SteganographyComponent: React.FC<
   const [password, setPassword] = useState<string>("");
   const [useEncryption, setUseEncryption] = useState<boolean>(true);
   const [imageCapacity, setImageCapacity] = useState<number>(0);
-  const [dataSize, setDataSize] = useState<number>(0);
 
   const handleImageSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,15 +44,18 @@ export const SteganographyComponent: React.FC<
           const capacity = await calculateImageCapacity(file);
           setImageCapacity(capacity);
 
-          if (selectedData && selectedData.size > capacity * 0.8) {
-            setError(
-              "Les données à cacher sont trop volumineuses pour cette image",
-            );
-          } else {
-            setError("");
+          if (selectedData) {
+            const dataSize = selectedData.size * 8;
+            if (dataSize > capacity) {
+              setError(
+                `Les données à cacher (${dataSize} bits) sont trop volumineuses pour cette image (capacité: ${capacity} bits)`,
+              );
+            } else {
+              setError("");
+            }
           }
         } catch (err) {
-          setError("Erreur lors de l'analyse de l'image");
+          setError(err instanceof Error ? err.message : "Erreur lors de l'analyse de l'image");
         }
 
         setSelectedImage(file);
@@ -73,8 +78,6 @@ export const SteganographyComponent: React.FC<
           setError("Fichier trop volumineux (limite: 50MB)");
           return;
         }
-
-        setDataSize(file.size);
 
         // Vérifier si l'image sélectionnée peut contenir ces données
         if (
@@ -198,8 +201,8 @@ export const SteganographyComponent: React.FC<
 
   // Calculer la capacité de stockage d'une image
   const calculateImageCapacity = async (imageFile: File): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
+    return new Promise<number>((resolve, reject) => {
+      const img = document.createElement('img') as HTMLImageElement;
       img.onload = () => {
         // Capacité théorique: 2 bits par pixel (R et G channels) / 8 bits par byte
         const capacity = Math.floor((img.width * img.height * 2) / 8);

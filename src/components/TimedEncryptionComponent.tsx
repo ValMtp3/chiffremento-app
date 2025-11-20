@@ -3,14 +3,17 @@ import {
   Clock,
   Shield,
   Download,
-  Upload,
   Timer,
   AlertTriangle,
   Info,
 } from "lucide-react";
 import { CryptoUtils } from "../utils/crypto";
+import { logger } from "../utils/logger";
 
-interface TimedEncryptionComponentProps {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface TimedEncryptionComponentProps {
+  // Props intentionnellement vide pour l'instant
+}
 
 export const TimedEncryptionComponent: React.FC<
   TimedEncryptionComponentProps
@@ -79,7 +82,7 @@ export const TimedEncryptionComponent: React.FC<
         try {
           const fileData = await file.arrayBuffer();
           await analyzeTimedFile(fileData);
-        } catch (err) {
+        } catch {
           setError("Impossible d'analyser le fichier temporisé");
         }
       }
@@ -104,8 +107,8 @@ export const TimedEncryptionComponent: React.FC<
         timeLeft,
         expired,
       });
-    } catch (err) {
-      console.warn("Impossible d'analyser les métadonnées du fichier");
+    } catch {
+      logger.warn("Impossible d'analyser les métadonnées du fichier");
     }
   };
 
@@ -518,7 +521,7 @@ export const TimedEncryptionComponent: React.FC<
               !timedFile ||
               !password ||
               isProcessing ||
-              (fileInfo && fileInfo.expired)
+              (fileInfo?.expired ?? false)
             }
             className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
           >

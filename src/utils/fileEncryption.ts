@@ -4,6 +4,7 @@ import {
   OperationProgress,
 } from "../types/crypto";
 import { CryptoUtils } from "./crypto";
+import { logger } from "./logger";
 
 // Service de chiffrement de fichiers sécurisé
 export class FileEncryptionService {
@@ -13,8 +14,7 @@ export class FileEncryptionService {
     options: EncryptionOptions,
     onProgress?: (progress: OperationProgress) => void,
   ): Promise<EncryptedFile> {
-    let processedData: ArrayBuffer;
-    let securePassword: any = null;
+    let processedData: ArrayBuffer | null = null;
 
     try {
       if (!options.password) {
@@ -70,7 +70,7 @@ export class FileEncryptionService {
             options.compress = false; // Désactiver la compression pour ce fichier
           }
         } catch (compressionError) {
-          console.warn(
+          logger.warn(
             "Compression échouée, utilisation des données non compressées",
             compressionError,
           );
@@ -89,7 +89,6 @@ export class FileEncryptionService {
         processedData = await this.paranoidEncrypt(
           processedData,
           options.password,
-          options.algorithm,
           onProgress,
         );
       } else {
@@ -111,7 +110,7 @@ export class FileEncryptionService {
         try {
           processedData = await CryptoUtils.addErrorCorrection(processedData);
         } catch (errorCorrectionError) {
-          console.warn(
+          logger.warn(
             "Ajout de correction d'erreurs échoué",
             errorCorrectionError,
           );
@@ -227,9 +226,6 @@ export class FileEncryptionService {
       if (processedData) {
         CryptoUtils.secureWipe(new Uint8Array(processedData));
       }
-      if (securePassword) {
-        securePassword.destroy();
-      }
 
       throw new Error(`Erreur lors du chiffrement: ${errorMessage}`);
     }
@@ -261,7 +257,7 @@ export class FileEncryptionService {
         message: "Lecture des données chiffrées...",
       });
 
-      processedData = encryptedFile.encryptedData;
+      let processedData: ArrayBuffer = encryptedFile.encryptedData;
 
       // Vérification de version et de compatibilité
       const metadata = encryptedFile.metadata;
@@ -297,7 +293,7 @@ export class FileEncryptionService {
         try {
           processedData = await CryptoUtils.correctErrors(processedData);
         } catch (correctionError) {
-          console.warn("Correction d'erreurs échouée", correctionError);
+          logger.warn("Correction d'erreurs échouée", correctionError);
           // Continuer sans correction si elle échoue
         }
       }
@@ -313,7 +309,6 @@ export class FileEncryptionService {
         processedData = await this.paranoidDecrypt(
           processedData,
           password,
-          this.extractBaseAlgorithm(metadata.algorithm || "aes-256-gcm"),
           onProgress,
         );
       } else {
@@ -346,7 +341,7 @@ export class FileEncryptionService {
             metadata.originalSize &&
             decompressedData.byteLength !== metadata.originalSize
           ) {
-            console.warn(
+            logger.warn(
               `Taille décompressée inattendue: ${decompressedData.byteLength} vs ${metadata.originalSize}`,
             );
           }
@@ -393,7 +388,7 @@ export class FileEncryptionService {
       });
 
       // Nettoyage sécurisé en cas d'erreur
-      if (processedData) {
+      if (processedData !== null) {
         CryptoUtils.secureWipe(new Uint8Array(processedData));
       }
 
@@ -421,20 +416,22 @@ export class FileEncryptionService {
     let iv: Uint8Array;
 
     switch (algorithm) {
-      case "aes-256-gcm":
+      case "aes-256-gcm": {
         const aesResult = await CryptoUtils.encryptAES(data, key);
         encrypted = aesResult.encrypted;
         iv = aesResult.iv;
         break;
+      }
 
-      case "chacha20-poly1305":
+      case "chacha20-poly1305": {
         // ChaCha20 simulé avec AES pour la compatibilité
         const chachaResult = await CryptoUtils.encryptAES(data, key);
         encrypted = chachaResult.encrypted;
         iv = chachaResult.iv;
         break;
+      }
 
-      case "twofish-256-cbc":
+      case "twofish-256-cbc": {
         const twofishResult = await CryptoUtils.encryptTwofish(
           data,
           derivedBytes,
@@ -442,8 +439,9 @@ export class FileEncryptionService {
         encrypted = twofishResult.encrypted;
         iv = twofishResult.iv;
         break;
+      }
 
-      case "serpent-256-cbc":
+      case "serpent-256-cbc": {
         const serpentResult = await CryptoUtils.encryptSerpent(
           data,
           derivedBytes,
@@ -451,6 +449,7 @@ export class FileEncryptionService {
         encrypted = serpentResult.encrypted;
         iv = serpentResult.iv;
         break;
+      }
 
       default:
         throw new Error(`Algorithme non supporté: ${algorithm}`);
@@ -592,7 +591,6 @@ export class FileEncryptionService {
   private static async paranoidEncrypt(
     data: ArrayBuffer,
     password: string,
-    algorithm: string,
     onProgress?: (progress: OperationProgress) => void,
   ): Promise<ArrayBuffer> {
     // Générer des mots de passe dérivés sécurisés avec des sels différents
@@ -676,7 +674,6 @@ export class FileEncryptionService {
   private static async paranoidDecrypt(
     encryptedData: ArrayBuffer,
     password: string,
-    baseAlgorithm: string,
     onProgress?: (progress: OperationProgress) => void,
   ): Promise<ArrayBuffer> {
     const data = new Uint8Array(encryptedData);
@@ -787,6 +784,7 @@ export class FileEncryptionService {
       ["deriveBits"],
     );
 
+    // @ts-expect-error - Limitation TypeScript: salt est Uint8Array mais TS strict veut BufferSource exact
     const derivedBits = await crypto.subtle.deriveBits(
       {
         name: "PBKDF2",
@@ -819,7 +817,7 @@ export class FileEncryptionService {
         callback(progress);
       } catch (error) {
         // Ignorer les erreurs de callback pour ne pas interrompre le processus
-        console.warn("Erreur dans le callback de progression:", error);
+        logger.warn("Erreur dans le callback de progression:", error);
       }
     }
   }
@@ -840,7 +838,7 @@ export class FileEncryptionService {
     return `Chiffrement ${algorithmNames[options.algorithm as keyof typeof algorithmNames] || options.algorithm}...`;
   }
 
-  private static getDecryptionMessage(metadata: any): string {
+  private static getDecryptionMessage(metadata: { algorithm?: string; paranoidMode?: boolean }): string {
     if (metadata.paranoidMode || metadata.algorithm?.includes("paranoid")) {
       return "Déchiffrement paranoïaque triple couche...";
     }

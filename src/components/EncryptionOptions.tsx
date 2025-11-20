@@ -1,11 +1,7 @@
 import React from "react";
 import {
   Shield,
-  Zap,
   Settings,
-  Clock,
-  Eye,
-  Image,
   AlertTriangle,
 } from "lucide-react";
 import { EncryptionOptions } from "../types/crypto";

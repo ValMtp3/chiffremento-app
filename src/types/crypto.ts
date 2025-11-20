@@ -40,6 +40,12 @@ export interface EncryptedFile {
     timed?: boolean;
     destructionTime?: number;
     errorCorrection?: boolean;
+    version?: number;
+    hasErrorCorrection?: boolean;
+    paranoidMode?: boolean;
+    originalSize?: number;
+    originalChecksum?: string;
+    fileName?: string;
   };
 }
 

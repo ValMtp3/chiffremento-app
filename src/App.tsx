@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Shield,
   FileText,
@@ -82,7 +82,7 @@ function App() {
       setIsComplete(true);
     } catch (err) {
       setHasError(true);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
       setIsProcessing(false);
     }
@@ -113,7 +113,7 @@ function App() {
       setIsComplete(true);
     } catch (err) {
       setHasError(true);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
       setIsProcessing(false);
     }
@@ -185,7 +185,7 @@ function App() {
             <div className="space-y-6">
               <FileDropZone
                 onFileSelect={setSelectedFile}
-                selectedFile={selectedFile}
+                selectedFile={selectedFile || undefined}
                 onClearFile={() => setSelectedFile(null)}
               />
 
@@ -229,7 +229,7 @@ function App() {
               />
 
               <OperationProgressComponent
-                progress={progress}
+                progress={progress || undefined}
                 isComplete={isComplete}
                 hasError={hasError}
                 error={error}
@@ -293,7 +293,7 @@ function App() {
 
             <div>
               <OperationProgressComponent
-                progress={progress}
+                progress={progress || undefined}
                 isComplete={isComplete}
                 hasError={hasError}
                 error={error}

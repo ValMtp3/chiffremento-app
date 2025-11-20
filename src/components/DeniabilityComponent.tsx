@@ -4,13 +4,15 @@ import {
   Eye,
   EyeOff,
   Download,
-  Upload,
   Lock,
   AlertTriangle,
 } from "lucide-react";
 import { CryptoUtils } from "../utils/crypto";
 
-interface DeniabilityComponentProps {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface DeniabilityComponentProps {
+  // Props intentionnellement vide pour l'instant
+}
 
 export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
   const [publicFile, setPublicFile] = useState<File | null>(null);
@@ -202,7 +204,7 @@ export const DeniabilityComponent: React.FC<DeniabilityComponentProps> = () => {
           );
           setExtractedData(decryptedPublic);
           setSuccess("Données publiques extraites avec succès!");
-        } catch (decryptError) {
+        } catch {
           throw new Error("Mot de passe public incorrect");
         }
       } else {

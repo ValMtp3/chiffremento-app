@@ -24,5 +24,13 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
     },
+  },
+  {
+    // Configuration spéciale pour les fichiers de test
+    files: ['**/*.test.{ts,tsx}', '**/test/**/*.{ts,tsx}', '**/setup.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
+    },
   }
 );

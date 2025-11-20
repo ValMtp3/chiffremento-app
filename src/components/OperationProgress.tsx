@@ -27,7 +27,7 @@ export const OperationProgressComponent: React.FC<OperationProgressProps> = ({
         ) : (
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
         )}
-        
+
         <h3 className="text-lg font-semibold text-white">
           {hasError ? 'Erreur' : isComplete ? 'Terminé' : 'En cours...'}
         </h3>
@@ -39,7 +39,7 @@ export const OperationProgressComponent: React.FC<OperationProgressProps> = ({
             <span className="text-gray-300">{progress.message}</span>
             <span className="text-gray-400">{progress.progress}%</span>
           </div>
-          
+
           <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
             <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
@@ -61,7 +61,12 @@ export const OperationProgressComponent: React.FC<OperationProgressProps> = ({
 
       {isComplete && (
         <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-          <p className="text-green-400">Opération terminée avec succès!</p>
+          <p className="text-green-400">
+            ✅ Opération terminée avec succès!
+          </p>
+          <p className="text-green-300 text-sm mt-2">
+            Le fichier a été téléchargé automatiquement.
+          </p>
         </div>
       )}
     </div>

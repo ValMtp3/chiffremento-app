@@ -28,7 +28,7 @@ export const FileDropZone: React.FC<FileDropZoneProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       onFileSelect(files[0]);
@@ -85,8 +85,8 @@ export const FileDropZone: React.FC<FileDropZoneProps> = ({
             onClick={handleClick}
             className={`
               border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200
-              ${isDragging 
-                ? 'border-blue-500 bg-blue-500/10' 
+              ${isDragging
+                ? 'border-blue-500 bg-blue-500/10'
                 : 'border-gray-600 hover:border-gray-500 hover:bg-gray-800/50'
               }
             `}
@@ -99,7 +99,7 @@ export const FileDropZone: React.FC<FileDropZoneProps> = ({
               ou cliquez pour parcourir vos fichiers
             </p>
             <p className="text-gray-500 text-sm mt-2">
-              Tous formats supportés
+              Tous formats et toutes tailles supportés
             </p>
           </div>
 

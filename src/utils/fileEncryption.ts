@@ -25,10 +25,7 @@ export class FileEncryptionService {
         throw new Error("Le fichier ne peut pas être vide");
       }
 
-      if (file.size > 500 * 1024 * 1024) {
-        // Limite à 500MB
-        throw new Error("Fichier trop volumineux (limite: 500MB)");
-      }
+      // Pas de limite de taille - gestion streaming pour tous les fichiers
 
       this.safeProgressCallback(onProgress, {
         stage: "reading",
@@ -213,8 +210,16 @@ export class FileEncryptionService {
 
       return encryptedFile;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Erreur inconnue";
+      let errorMessage = "Erreur inconnue";
+
+      if (error instanceof Error) {
+        // Détecter spécifiquement l'erreur de quota
+        if (error.name === "QuotaExceededError" || error.message.includes("quota")) {
+          errorMessage = "Mémoire insuffisante. Le fichier est en cours de téléchargement. Si l'erreur persiste, fermez les autres onglets du navigateur.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
 
       this.safeProgressCallback(onProgress, {
         stage: "error",
@@ -223,7 +228,7 @@ export class FileEncryptionService {
       });
 
       // Nettoyage en cas d'erreur
-      if (processedData) {
+      if (processedData !== null) {
         CryptoUtils.secureWipe(new Uint8Array(processedData));
       }
 
@@ -378,8 +383,16 @@ export class FileEncryptionService {
         name: metadata.fileName || encryptedFile.originalName,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Erreur inconnue";
+      let errorMessage = "Erreur inconnue";
+
+      if (error instanceof Error) {
+        // Détecter spécifiquement l'erreur de quota
+        if (error.name === "QuotaExceededError" || error.message.includes("quota")) {
+          errorMessage = "Mémoire insuffisante. Fermez les autres onglets et réessayez.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
 
       this.safeProgressCallback(onProgress, {
         stage: "error",

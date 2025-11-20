@@ -880,14 +880,26 @@ export class CryptoUtils {
     hiddenStart: number,
     hiddenSize: number,
   ): void {
-    // Générer du bruit cryptographiquement sécurisé
-    const noise = crypto.getRandomValues(new Uint8Array(container.length));
+    // Générer du bruit cryptographiquement sécurisé par blocs de 64KB max
+    const MAX_ENTROPY_BYTES = 65536; // Limite de crypto.getRandomValues()
+    const totalNoiseNeeded = container.length - start;
 
-    for (let i = start; i < container.length; i++) {
-      // Éviter d'écraser les données cachées
-      if (i < hiddenStart || i >= hiddenStart + hiddenSize + 4) {
-        container[i] = noise[i];
+    let noiseOffset = 0;
+    while (noiseOffset < totalNoiseNeeded) {
+      const blockSize = Math.min(MAX_ENTROPY_BYTES, totalNoiseNeeded - noiseOffset);
+      const noiseBlock = crypto.getRandomValues(new Uint8Array(blockSize));
+
+      for (let i = 0; i < blockSize; i++) {
+        const containerIndex = start + noiseOffset + i;
+        if (containerIndex < container.length) {
+          // Éviter d'écraser les données cachées
+          if (containerIndex < hiddenStart || containerIndex >= hiddenStart + hiddenSize + 4) {
+            container[containerIndex] = noiseBlock[i];
+          }
+        }
       }
+
+      noiseOffset += blockSize;
     }
   }
 

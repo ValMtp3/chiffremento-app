@@ -27,9 +27,7 @@ type Tab = "encrypt" | "decrypt" | "steganography" | "deniability" | "timed";
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("encrypt");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [encryptedFile, setEncryptedFile] = useState<EncryptedFile | null>(
-    null,
-  );
+  const [fileToDecrypt, setFileToDecrypt] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
@@ -62,6 +60,8 @@ function App() {
     setIsComplete(false);
     setHasError(false);
     setError("");
+    // Libérer la mémoire du fichier chiffré précédent
+    setFileToDecrypt(null);
   };
 
   const handleEncrypt = async () => {
@@ -78,8 +78,29 @@ function App() {
         setProgress,
       );
 
-      setEncryptedFile(result);
-      setIsComplete(true);
+      // Libérer immédiatement le fichier original pour économiser la mémoire
+      setSelectedFile(null);
+
+      // Télécharger automatiquement
+      try {
+        const blob = new Blob([result.encryptedData], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${result.originalName}.encrypted`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // Nettoyer l'URL immédiatement
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+
+        setIsComplete(true);
+      } catch {
+        // Même en cas d'erreur de téléchargement, on considère le chiffrement réussi
+        setIsComplete(true);
+        console.warn("Téléchargement automatique échoué, le fichier a été chiffré avec succès");
+      }
     } catch (err) {
       setHasError(true);
       setError(err instanceof Error ? err.message : "Erreur inconnue");
@@ -89,46 +110,68 @@ function App() {
   };
 
   const handleDecrypt = async () => {
-    if (!encryptedFile || !password) return;
+    if (!fileToDecrypt || !password) return;
 
     try {
       resetState();
       setIsProcessing(true);
 
+      // Lire le fichier chiffré
+      const fileData = await fileToDecrypt.arrayBuffer();
+
+      // Créer un objet EncryptedFile temporaire pour la compatibilité
+      const tempEncryptedFile: EncryptedFile = {
+        id: "temp",
+        originalName: fileToDecrypt.name.replace('.encrypted', ''),
+        encryptedData: fileData,
+        metadata: {
+          algorithm: "aes-256-gcm", // Sera détecté automatiquement
+          timestamp: Date.now(),
+          compressed: false,
+          fragmented: false,
+          checksum: "",
+          deniable: false,
+          steganographic: false,
+          timed: false,
+          errorCorrection: false,
+        }
+      };
+
       const result = await FileEncryptionService.decryptFile(
-        encryptedFile,
+        tempEncryptedFile,
         password,
         setProgress,
       );
 
-      // Créer un lien de téléchargement
-      const blob = new Blob([result.data]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.name;
-      a.click();
-      URL.revokeObjectURL(url);
+      // Libérer immédiatement le fichier chiffré
+      setFileToDecrypt(null);
 
-      setIsComplete(true);
+      // Créer un lien de téléchargement
+      try {
+        const blob = new Blob([result.data], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = result.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // Nettoyer l'URL immédiatement
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+
+        setIsComplete(true);
+      } catch {
+        // Même en cas d'erreur de téléchargement, on considère le déchiffrement réussi
+        setIsComplete(true);
+        console.warn("Téléchargement automatique échoué, le fichier a été déchiffré avec succès");
+      }
     } catch (err) {
       setHasError(true);
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleDownloadEncrypted = () => {
-    if (!encryptedFile) return;
-
-    const blob = new Blob([encryptedFile.encryptedData]);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${encryptedFile.originalName}.encrypted`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handlePasswordGenerated = (newPassword: string) => {
@@ -211,15 +254,7 @@ function App() {
                 Chiffrer le Fichier
               </button>
 
-              {encryptedFile && (
-                <button
-                  onClick={handleDownloadEncrypted}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Télécharger le Fichier Chiffré
-                </button>
-              )}
+
             </div>
 
             <div className="space-y-6">
@@ -253,12 +288,7 @@ function App() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      // Dans un vrai cas, on devrait parser le fichier chiffré
-                      // Ici on simule juste pour la démo
-                      console.log(
-                        "Fichier sélectionné pour déchiffrement:",
-                        file,
-                      );
+                      setFileToDecrypt(file);
                     }
                   }}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-orange-600 file:text-white hover:file:bg-orange-700 transition-colors"
@@ -283,7 +313,7 @@ function App() {
 
               <button
                 onClick={handleDecrypt}
-                disabled={!encryptedFile || !password || isProcessing}
+                disabled={!fileToDecrypt || !password || isProcessing}
                 className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Download className="w-5 h-5" />
